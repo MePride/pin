@@ -11,13 +11,19 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_sleep.h"
-#include "driver/adc.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 #include "driver/gpio.h"
 
 static const char* TAG = "PIN_DISPLAY";
 
 // Global display handle
 static fpc_a005_handle_t g_display_handle = NULL;
+
+// ADC handles for new API
+static adc_oneshot_unit_handle_t adc1_handle;
+static adc_cali_handle_t adc1_cali_handle;
 static pin_display_config_t g_display_config;
 static SemaphoreHandle_t g_display_mutex = NULL;
 
@@ -77,12 +83,12 @@ esp_err_t pin_display_init(void) {
     // Configure FPC-A005 display
     fpc_a005_config_t display_config = {
         .spi_host = SPI2_HOST,
-        .sck_io = CONFIG_PIN_DISPLAY_SCK_GPIO,
-        .mosi_io = CONFIG_PIN_DISPLAY_MOSI_GPIO,
-        .cs_io = CONFIG_PIN_DISPLAY_CS_GPIO,
-        .dc_io = CONFIG_PIN_DISPLAY_DC_GPIO,
-        .rst_io = CONFIG_PIN_DISPLAY_RST_GPIO,
-        .busy_io = CONFIG_PIN_DISPLAY_BUSY_GPIO,
+        .sck_io = 2,   // SCK GPIO
+        .mosi_io = 3,  // MOSI GPIO
+        .cs_io = 10,   // CS GPIO
+        .dc_io = 4,    // DC GPIO
+        .rst_io = 5,   // RST GPIO
+        .busy_io = 6,  // BUSY GPIO
         .spi_clock_speed_hz = 4 * 1000 * 1000, // 4 MHz
     };
     
@@ -113,8 +119,25 @@ esp_err_t pin_display_init(void) {
     }
     
     // Initialize ADC for battery monitoring
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(CONFIG_PIN_BATTERY_ADC_CHANNEL, ADC_ATTEN_DB_11);
+    adc_oneshot_unit_init_cfg_t init_config1 = {
+        .unit_id = ADC_UNIT_1,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
+    
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTEN_DB_12,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_0, &config));
+    
+    // Initialize calibration handle
+    adc_cali_curve_fitting_config_t cali_config = {
+        .unit_id = ADC_UNIT_1,
+        .chan = ADC_CHANNEL_0,
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &adc1_cali_handle));
     
     ESP_LOGI(TAG, "Pin display system initialized successfully");
     return ESP_OK;
@@ -434,10 +457,14 @@ esp_err_t pin_display_wake(void) {
 }
 
 float pin_battery_get_voltage(void) {
-    int raw_value = adc1_get_raw(CONFIG_PIN_BATTERY_ADC_CHANNEL);
+    int adc_raw;
+    int voltage_mv;
     
-    // Convert to voltage (assuming 11dB attenuation and voltage divider)
-    float voltage = (raw_value * 3.3f / 4095.0f) * 2.0f;  // Assuming 1:1 voltage divider
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC_CHANNEL_0, &adc_raw));
+    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, adc_raw, &voltage_mv));
+    
+    // Convert to voltage and apply voltage divider correction
+    float voltage = (voltage_mv / 1000.0f) * 2.0f;  // Assuming 1:1 voltage divider
     
     return voltage;
 }
@@ -472,8 +499,12 @@ void pin_enter_deep_sleep(void) {
     
     // Configure wake up sources
     esp_sleep_enable_timer_wakeup(10 * 60 * 1000000ULL); // Wake up after 10 minutes
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // Wake up on button press
+    esp_sleep_enable_gpio_wakeup(); // Enable GPIO wake up source
     
     // Enter deep sleep
     esp_deep_sleep_start();
+}
+
+fpc_a005_handle_t pin_display_get_handle(void) {
+    return g_display_handle;
 }

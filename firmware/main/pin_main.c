@@ -155,7 +155,19 @@ static void pin_show_ready_screen(void) {
  * 检查唤醒原因并处理
  */
 static void pin_handle_wakeup_reason(void) {
-    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+    esp_sleep_source_t wakeup_reasons = esp_sleep_get_wakeup_causes();
+    esp_sleep_wakeup_cause_t wakeup_reason = ESP_SLEEP_WAKEUP_UNDEFINED;
+    
+    // Convert new API result to old API format for compatibility
+    if (wakeup_reasons & ESP_SLEEP_WAKEUP_TIMER) {
+        wakeup_reason = ESP_SLEEP_WAKEUP_TIMER;
+    } else if (wakeup_reasons & ESP_SLEEP_WAKEUP_EXT0) {
+        wakeup_reason = ESP_SLEEP_WAKEUP_EXT0;
+    } else if (wakeup_reasons & ESP_SLEEP_WAKEUP_EXT1) {
+        wakeup_reason = ESP_SLEEP_WAKEUP_EXT1;
+    } else if (wakeup_reasons & ESP_SLEEP_WAKEUP_GPIO) {
+        wakeup_reason = ESP_SLEEP_WAKEUP_GPIO;
+    }
     
     switch (wakeup_reason) {
         case ESP_SLEEP_WAKEUP_TIMER:
@@ -175,7 +187,6 @@ static void pin_handle_wakeup_reason(void) {
  * 主任务
  */
 static void pin_main_task(void *pvParameters) {
-    esp_err_t ret;
     EventBits_t event_bits;
     
     ESP_LOGI(TAG, "Main task started");

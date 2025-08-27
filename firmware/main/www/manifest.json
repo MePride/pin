@@ -1,0 +1,16 @@
+{
+    "name": "Pin E-ink Display",
+    "short_name": "Pin Display",
+    "description": "Pin E-ink Display Device Control Panel",
+    "start_url": "/",
+    "display": "standalone",
+    "theme_color": "#007bff",
+    "background_color": "#ffffff",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%23007bff'/><text x='32' y='38' font-family='Arial' font-size='24' fill='white' text-anchor='middle'>P</text></svg>",
+            "sizes": "64x64",
+            "type": "image/svg+xml"
+        }
+    ]
+}

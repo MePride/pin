@@ -15,7 +15,7 @@
 #include "esp_err.h"
 #include "nvs_flash.h"
 #include "nvs.h"
-#include "cjson/cjson.h"
+#include "cJSON.h"
 #include "pin_canvas.h"
 
 static const char* TAG = "PIN_CANVAS";
@@ -451,7 +451,7 @@ esp_err_t pin_canvas_display(pin_canvas_handle_t handle, const char* canvas_id) 
     // Convert buffer to display format and update display
     ret = fpc_a005_draw_bitmap(handle->display_handle, 0, 0, PIN_CANVAS_WIDTH, PIN_CANVAS_HEIGHT, handle->render_buffer);
     if (ret == ESP_OK) {
-        ret = fpc_a005_display(handle->display_handle);
+        ret = fpc_a005_refresh(handle->display_handle, FPC_A005_REFRESH_FULL);
     }
 
     if (ret == ESP_OK) {
@@ -471,8 +471,9 @@ esp_err_t pin_canvas_list(pin_canvas_handle_t handle, char canvas_ids[][32], siz
     *count = 0;
     xSemaphoreTake(handle->mutex, portMAX_DELAY);
 
-    nvs_iterator_t iter = nvs_entry_find(NVS_CANVAS_NAMESPACE, NULL, NVS_TYPE_BLOB);
-    while (iter != NULL && *count < max_count) {
+    nvs_iterator_t iter = NULL;
+    esp_err_t err = nvs_entry_find(NVS_DEFAULT_PART_NAME, NVS_CANVAS_NAMESPACE, NVS_TYPE_BLOB, &iter);
+    while (err == ESP_OK && iter != NULL && *count < max_count) {
         nvs_entry_info_t info;
         nvs_entry_info(iter, &info);
         
@@ -480,7 +481,11 @@ esp_err_t pin_canvas_list(pin_canvas_handle_t handle, char canvas_ids[][32], siz
         canvas_ids[*count][31] = '\0';
         (*count)++;
         
-        iter = nvs_entry_next(iter);
+        err = nvs_entry_next(&iter);
+    }
+    
+    if (iter != NULL) {
+        nvs_release_iterator(iter);
     }
 
     xSemaphoreGive(handle->mutex);

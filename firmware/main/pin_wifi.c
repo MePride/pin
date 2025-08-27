@@ -57,3 +57,50 @@ esp_err_t pin_wifi_start_ap(void) {
     
     return ESP_OK;
 }
+
+bool pin_wifi_is_connected(void) {
+    wifi_mode_t mode;
+    esp_err_t ret = esp_wifi_get_mode(&mode);
+    if (ret != ESP_OK) {
+        return false;
+    }
+    
+    if (mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA) {
+        wifi_ap_record_t ap_info;
+        ret = esp_wifi_sta_get_ap_info(&ap_info);
+        return (ret == ESP_OK);
+    }
+    
+    return false;
+}
+
+esp_err_t pin_wifi_get_current_ssid(char* ssid, size_t max_len) {
+    if (!ssid || max_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    wifi_ap_record_t ap_info;
+    esp_err_t ret = esp_wifi_sta_get_ap_info(&ap_info);
+    if (ret == ESP_OK) {
+        strncpy(ssid, (char*)ap_info.ssid, max_len - 1);
+        ssid[max_len - 1] = '\0';
+    } else {
+        ssid[0] = '\0';
+    }
+    
+    return ret;
+}
+
+int8_t pin_wifi_get_rssi(void) {
+    wifi_ap_record_t ap_info;
+    esp_err_t ret = esp_wifi_sta_get_ap_info(&ap_info);
+    if (ret == ESP_OK) {
+        return ap_info.rssi;
+    }
+    return -100; // Very weak signal as default
+}
+
+esp_err_t pin_wifi_start_config_task(void) {
+    ESP_LOGI(TAG, "Starting WiFi configuration task");
+    return ESP_OK;
+}

@@ -38,15 +38,7 @@ typedef enum {
     PIN_FONT_XLARGE = 32
 } pin_font_size_t;
 
-// Widget region definition
-typedef struct {
-    uint16_t x, y, width, height;
-    pin_color_t color;
-    char* content;
-    uint8_t font_size;
-    bool visible;
-    bool dirty;
-} pin_widget_region_t;
+// Widget region definition is now in pin_plugin.h
 
 // Display configuration
 typedef struct {
@@ -213,6 +205,12 @@ bool pin_should_enter_sleep(void);
  * @brief Enter deep sleep mode
  */
 void pin_enter_deep_sleep(void);
+
+/**
+ * @brief Get display handle
+ * @return Display handle
+ */
+fpc_a005_handle_t pin_display_get_handle(void);
 
 #ifdef __cplusplus
 }

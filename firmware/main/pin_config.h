@@ -6,6 +6,8 @@
 #ifndef PIN_CONFIG_H
 #define PIN_CONFIG_H
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,6 +28,10 @@ extern "C" {
 // Plugin configuration
 #define CONFIG_PIN_PLUGIN_MAX_COUNT 10
 #define CONFIG_PIN_PLUGIN_HEAP_SIZE 32768
+
+// Function declarations
+void pin_config_init(void);
+bool pin_config_get_sleep_enabled(void);
 
 #ifdef __cplusplus
 }

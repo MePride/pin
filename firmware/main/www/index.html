@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin E-ink Display Device</title>
+    <link rel="manifest" href="/manifest.json">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Pin E-ink Display</h1>
+        <div class="status">
+            <p>Status: <span id="status">Connecting...</span></p>
+            <p>Battery: <span id="battery">--</span>%</p>
+            <p>Firmware: <span id="firmware">--</span></p>
+        </div>
+        <div>
+            <button onclick="refreshDisplay()">Refresh Display</button>
+            <button onclick="clearDisplay()">Clear Display</button>
+            <button onclick="getStatus()">Get Status</button>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

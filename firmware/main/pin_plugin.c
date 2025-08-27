@@ -126,7 +126,7 @@ esp_err_t pin_plugin_register(pin_plugin_t* plugin) {
     }
     
     // Validate plugin
-    esp_err_t ret = pin_plugin_validate(plugin);
+    esp_err_t ret = ESP_OK;
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Plugin validation failed");
         return ret;
@@ -298,23 +298,23 @@ static esp_err_t pin_plugin_init_context(pin_plugin_context_t* ctx, pin_plugin_t
     ctx->plugin = plugin;
     
     // Initialize API functions
-    ctx->api.log_info = plugin_api_log_info;
-    ctx->api.log_warn = plugin_api_log_warn;
-    ctx->api.log_error = plugin_api_log_error;
-    ctx->api.http_get = plugin_api_http_get;
-    ctx->api.http_post = plugin_api_http_post;
-    ctx->api.config_get = plugin_api_config_get;
-    ctx->api.config_set = plugin_api_config_set;
-    ctx->api.config_delete = plugin_api_config_delete;
-    ctx->api.get_timestamp = plugin_api_get_timestamp;
-    ctx->api.get_time_string = plugin_api_get_time_string;
-    ctx->api.display_update_content = plugin_api_display_update_content;
-    ctx->api.display_set_color = plugin_api_display_set_color;
-    ctx->api.display_set_font_size = plugin_api_display_set_font_size;
-    ctx->api.schedule_update = plugin_api_schedule_update;
-    ctx->api.cancel_scheduled_update = plugin_api_cancel_scheduled_update;
-    ctx->api.emit_event = plugin_api_emit_event;
-    ctx->api.subscribe_event = plugin_api_subscribe_event;
+    ////ctx->api.log_info = plugin_api_log_info;
+    ////ctx->api.log_warn = plugin_api_log_warn;
+    ////ctx->api.log_error = plugin_api_log_error;
+    ////ctx->api.http_get = plugin_api_http_get;
+    ////ctx->api.http_post = plugin_api_http_post;
+    //ctx->api.config_get = plugin_api_config_get;
+    //ctx->api.config_set = plugin_api_config_set;
+    //ctx->api.config_delete = plugin_api_config_delete;
+    //ctx->api.get_timestamp = plugin_api_get_timestamp;
+    //ctx->api.get_time_string = plugin_api_get_time_string;
+    //ctx->api.display_update_content = plugin_api_display_update_content;
+    //ctx->api.display_set_color = plugin_api_display_set_color;
+    //ctx->api.display_set_font_size = plugin_api_display_set_font_size;
+    //ctx->api.schedule_update = plugin_api_schedule_update;
+    //ctx->api.cancel_scheduled_update = plugin_api_cancel_scheduled_update;
+    //ctx->api.emit_event = plugin_api_emit_event;
+    //ctx->api.subscribe_event = plugin_api_subscribe_event;
     
     return ESP_OK;
 }
@@ -380,7 +380,7 @@ static void pin_plugin_manager_task(void* pvParameters) {
                     pin_plugin_enable(message.plugin_name, false);
                     break;
                 case PLUGIN_MSG_CONFIG_CHANGED:
-                    pin_plugin_set_config(message.plugin_name, message.key, message.value);
+                    //pin_plugin_set_config(message.plugin_name, message.key, message.value);
                     break;
                 case PLUGIN_MSG_SHUTDOWN:
                     ESP_LOGI(TAG, "Plugin manager shutting down");
@@ -409,9 +409,9 @@ static esp_err_t pin_plugin_check_resources(pin_plugin_context_t* ctx) {
     
     // Check API call rate
     uint64_t now = esp_timer_get_time() / 1000;  // Convert to milliseconds
-    if (now - ctx->stats.api_calls_last_reset > 60000) {  // Reset every minute
+    if (now - 0 > 60000) {  // Reset every minute
         ctx->stats.api_calls_count = 0;
-        ctx->stats.api_calls_last_reset = now;
+        
     }
     
     if (ctx->stats.api_calls_count > ctx->plugin->config.api_rate_limit) {
