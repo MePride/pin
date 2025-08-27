@@ -23,17 +23,21 @@
 #include "pin_plugin.h"
 #include "pin_config.h"
 #include "pin_webserver.h"
+#include "pin_canvas.h"
 
 static const char* TAG = "PIN_MAIN";
 
-// 全局事件组
+// 全局事件组和句柄
 EventGroupHandle_t g_pin_event_group;
+static pin_canvas_handle_t g_canvas_handle = NULL;
+static fpc_a005_handle_t g_display_handle = NULL;
 
 // Pin事件位定义
 #define PIN_DISPLAY_READY_BIT   BIT0
 #define PIN_WIFI_CONNECTED_BIT  BIT1
-#define PIN_PLUGINS_READY_BIT   BIT2
-#define PIN_WEB_SERVER_READY_BIT BIT3
+#define PIN_CANVAS_READY_BIT    BIT2
+#define PIN_PLUGINS_READY_BIT   BIT3
+#define PIN_WEB_SERVER_READY_BIT BIT4
 
 /**
  * 系统初始化
@@ -241,6 +245,9 @@ void app_main(void) {
         xEventGroupSetBits(g_pin_event_group, PIN_DISPLAY_READY_BIT);
         ESP_LOGI(TAG, "Display system initialized");
         
+        // Get display handle for canvas system
+        g_display_handle = pin_display_get_handle();
+        
         // 显示启动界面
         pin_show_startup_screen();
     } else {
@@ -249,9 +256,19 @@ void app_main(void) {
     
     // 初始化配置系统
     pin_update_startup_status("Loading Configuration...");
-    ret = pin_config_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Configuration initialization failed: %s", esp_err_to_name(ret));
+    pin_config_init();
+    ESP_LOGI(TAG, "Configuration system initialized");
+    
+    // 初始化Canvas系统
+    if (g_display_handle) {
+        pin_update_startup_status("Initializing Canvas...");
+        ret = pin_canvas_init(g_display_handle, &g_canvas_handle);
+        if (ret == ESP_OK) {
+            xEventGroupSetBits(g_pin_event_group, PIN_CANVAS_READY_BIT);
+            ESP_LOGI(TAG, "Canvas system initialized");
+        } else {
+            ESP_LOGE(TAG, "Canvas initialization failed: %s", esp_err_to_name(ret));
+        }
     }
     
     // 初始化WiFi系统
@@ -285,10 +302,15 @@ void app_main(void) {
     
     // 初始化Web服务器
     pin_update_startup_status("Starting Web Server...");
-    ret = pin_webserver_init();
+    ret = pin_webserver_init(g_canvas_handle);
     if (ret == ESP_OK) {
-        xEventGroupSetBits(g_pin_event_group, PIN_WEB_SERVER_READY_BIT);
-        ESP_LOGI(TAG, "Web server initialized");
+        ret = pin_webserver_start();
+        if (ret == ESP_OK) {
+            xEventGroupSetBits(g_pin_event_group, PIN_WEB_SERVER_READY_BIT);
+            ESP_LOGI(TAG, "Web server started");
+        } else {
+            ESP_LOGE(TAG, "Web server start failed: %s", esp_err_to_name(ret));
+        }
     } else {
         ESP_LOGE(TAG, "Web server initialization failed: %s", esp_err_to_name(ret));
     }

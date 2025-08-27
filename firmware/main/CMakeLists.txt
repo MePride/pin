@@ -16,4 +16,5 @@ idf_component_register(SRCS "pin_main.c"
                                 spi_flash
                                 mbedtls
                                 fpc_a005
-                                pin_plugin_api)
+                                pin_plugin_api
+                                pin_canvas)

@@ -12,7 +12,15 @@ class PinConfigApp {
             wifiNetworks: [],
             selectedNetwork: null,
             plugins: [],
-            settings: {}
+            settings: {},
+            canvases: [],
+            currentCanvas: null,
+            selectedElement: null,
+            canvasEditor: {
+                mode: 'select', // select, text, image, shape
+                zoom: 1.0,
+                showGrid: true
+            }
         };
         
         this.init();
@@ -29,6 +37,9 @@ class PinConfigApp {
         
         // 加载初始数据
         await this.loadInitialData();
+        
+        // 加载画布数据
+        await this.loadCanvases();
         
         // 设置定期状态更新
         this.startStatusPolling();
@@ -147,6 +158,266 @@ class PinConfigApp {
         } catch (error) {
             console.error('Failed to load settings:', error);
         }
+    }
+    
+    async loadCanvases() {
+        try {
+            const response = await this.deviceAPI.getCanvases();
+            this.state.canvases = response.canvases || [];
+            this.renderCanvasesList(this.state.canvases);
+        } catch (error) {
+            console.error('Failed to load canvases:', error);
+        }
+    }
+    
+    async createNewCanvas() {
+        const name = prompt('输入画布名称:');
+        if (!name) return;
+        
+        const id = 'canvas_' + Date.now();
+        
+        try {
+            await this.deviceAPI.createCanvas(id, name);
+            await this.loadCanvases();
+            this.showToast('画布创建成功', 'success');
+        } catch (error) {
+            console.error('Failed to create canvas:', error);
+            this.showToast('画布创建失败', 'error');
+        }
+    }
+    
+    async selectCanvas(canvasId) {
+        try {
+            const canvas = await this.deviceAPI.getCanvas(canvasId);
+            this.state.currentCanvas = canvas;
+            this.renderCanvasEditor(canvas);
+            this.showCanvasEditor();
+        } catch (error) {
+            console.error('Failed to load canvas:', error);
+            this.showToast('加载画布失败', 'error');
+        }
+    }
+    
+    async deleteCanvas(canvasId) {
+        if (!confirm('确定要删除这个画布吗？')) return;
+        
+        try {
+            await this.deviceAPI.deleteCanvas(canvasId);
+            await this.loadCanvases();
+            if (this.state.currentCanvas && this.state.currentCanvas.id === canvasId) {
+                this.state.currentCanvas = null;
+                this.hideCanvasEditor();
+            }
+            this.showToast('画布删除成功', 'success');
+        } catch (error) {
+            console.error('Failed to delete canvas:', error);
+            this.showToast('画布删除失败', 'error');
+        }
+    }
+    
+    async displayCanvas(canvasId) {
+        try {
+            await this.deviceAPI.displayCanvas(canvasId);
+            this.showToast('画布已显示到设备', 'success');
+        } catch (error) {
+            console.error('Failed to display canvas:', error);
+            this.showToast('画布显示失败', 'error');
+        }
+    }
+    
+    async saveCurrentCanvas() {
+        if (!this.state.currentCanvas) return;
+        
+        try {
+            await this.deviceAPI.updateCanvas(this.state.currentCanvas);
+            this.showToast('画布保存成功', 'success');
+        } catch (error) {
+            console.error('Failed to save canvas:', error);
+            this.showToast('画布保存失败', 'error');
+        }
+    }
+    
+    addTextElement() {
+        if (!this.state.currentCanvas) return;
+        
+        const text = prompt('输入文字内容:');
+        if (!text) return;
+        
+        const element = {
+            id: 'text_' + Date.now(),
+            type: 0, // PIN_CANVAS_ELEMENT_TEXT
+            x: 50,
+            y: 50,
+            width: 200,
+            height: 50,
+            z_index: 0,
+            visible: true,
+            props: {
+                text: text,
+                font_size: 16,
+                color: 0, // BLACK
+                align: 0, // LEFT
+                bold: false,
+                italic: false
+            }
+        };
+        
+        this.state.currentCanvas.elements = this.state.currentCanvas.elements || [];
+        this.state.currentCanvas.elements.push(element);
+        this.renderCanvasEditor(this.state.currentCanvas);
+    }
+    
+    addImageElement() {
+        if (!this.state.currentCanvas) return;
+        
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const imageId = 'img_' + Date.now();
+            
+            try {
+                await this.deviceAPI.uploadImage(imageId, file);
+                
+                const element = {
+                    id: 'image_' + Date.now(),
+                    type: 1, // PIN_CANVAS_ELEMENT_IMAGE
+                    x: 50,
+                    y: 50,
+                    width: 100,
+                    height: 100,
+                    z_index: 0,
+                    visible: true,
+                    props: {
+                        image_id: imageId,
+                        format: 0,
+                        maintain_aspect_ratio: true,
+                        opacity: 255
+                    }
+                };
+                
+                this.state.currentCanvas.elements = this.state.currentCanvas.elements || [];
+                this.state.currentCanvas.elements.push(element);
+                this.renderCanvasEditor(this.state.currentCanvas);
+                this.showToast('图片添加成功', 'success');
+            } catch (error) {
+                console.error('Failed to upload image:', error);
+                this.showToast('图片上传失败', 'error');
+            }
+        };
+        fileInput.click();
+    }
+    
+    // Template and preset methods
+    createTemplate(name, description) {
+        if (!this.state.currentCanvas) return;
+        
+        const template = {
+            id: 'template_' + Date.now(),
+            name: name,
+            description: description,
+            canvas: JSON.parse(JSON.stringify(this.state.currentCanvas)) // Deep copy
+        };
+        
+        // Store in localStorage for now
+        const templates = JSON.parse(localStorage.getItem('pin_canvas_templates') || '[]');
+        templates.push(template);
+        localStorage.setItem('pin_canvas_templates', JSON.stringify(templates));
+        
+        this.showToast('模板创建成功', 'success');
+    }
+    
+    loadTemplate(templateId) {
+        const templates = JSON.parse(localStorage.getItem('pin_canvas_templates') || '[]');
+        const template = templates.find(t => t.id === templateId);
+        
+        if (!template) {
+            this.showToast('模板不存在', 'error');
+            return;
+        }
+        
+        // Create new canvas from template
+        const newCanvasId = 'canvas_' + Date.now();
+        const newCanvas = {
+            ...template.canvas,
+            id: newCanvasId,
+            name: template.name + '_副本',
+            created_time: Math.floor(Date.now() / 1000),
+            modified_time: Math.floor(Date.now() / 1000)
+        };
+        
+        this.deviceAPI.createCanvas(newCanvasId, newCanvas.name).then(() => {
+            return this.deviceAPI.updateCanvas(newCanvas);
+        }).then(() => {
+            this.loadCanvases();
+            this.showToast('从模板创建画布成功', 'success');
+        }).catch(error => {
+            console.error('Failed to create canvas from template:', error);
+            this.showToast('从模板创建画布失败', 'error');
+        });
+    }
+    
+    applyPreset(presetId) {
+        const presets = [
+            {
+                id: 'clock_preset',
+                name: '时钟显示',
+                elements: [
+                    {
+                        id: 'time_text',
+                        type: 0,
+                        x: 200, y: 180, width: 200, height: 80,
+                        z_index: 0, visible: true,
+                        props: { text: '12:34', font_size: 32, color: 0, align: 1, bold: true, italic: false }
+                    }
+                ]
+            },
+            {
+                id: 'weather_preset',
+                name: '天气显示',
+                elements: [
+                    {
+                        id: 'temperature',
+                        type: 0,
+                        x: 200, y: 150, width: 200, height: 80,
+                        z_index: 0, visible: true,
+                        props: { text: '23°C', font_size: 48, color: 2, align: 1, bold: true, italic: false }
+                    }
+                ]
+            }
+        ];
+        
+        const preset = presets.find(p => p.id === presetId);
+        if (!preset) {
+            this.showToast('预设不存在', 'error');
+            return;
+        }
+        
+        // Create new canvas with preset
+        const canvasId = 'canvas_' + Date.now();
+        
+        this.deviceAPI.createCanvas(canvasId, preset.name).then(() => {
+            const canvas = {
+                id: canvasId,
+                name: preset.name,
+                background_color: 1,
+                created_time: Math.floor(Date.now() / 1000),
+                modified_time: Math.floor(Date.now() / 1000),
+                elements: preset.elements,
+                element_count: preset.elements.length
+            };
+            
+            return this.deviceAPI.updateCanvas(canvas);
+        }).then(() => {
+            this.loadCanvases();
+            this.showToast('预设应用成功', 'success');
+        }).catch(error => {
+            console.error('Failed to apply preset:', error);
+            this.showToast('预设应用失败', 'error');
+        });
     }
     
     async scanWiFiNetworks() {
@@ -415,6 +686,169 @@ class PinConfigApp {
         }
     }
     
+    renderCanvasesList(canvases) {
+        const container = document.getElementById('canvas-list');
+        if (!container) return;
+        
+        if (!canvases || canvases.length === 0) {
+            container.innerHTML = '<p>暂无画布，请创建一个新画布</p>';
+            return;
+        }
+        
+        container.innerHTML = '';
+        canvases.forEach(canvas => {
+            const canvasDiv = document.createElement('div');
+            canvasDiv.className = 'canvas-item';
+            canvasDiv.innerHTML = `
+                <div class="canvas-info">
+                    <h4>${canvas.name}</h4>
+                    <p>元素数量: ${canvas.element_count || 0}</p>
+                    <p>修改时间: ${new Date(canvas.modified_time * 1000).toLocaleString()}</p>
+                </div>
+                <div class="canvas-actions">
+                    <button onclick="pinApp.selectCanvas('${canvas.id}')" class="btn btn-primary">编辑</button>
+                    <button onclick="pinApp.displayCanvas('${canvas.id}')" class="btn btn-secondary">显示</button>
+                    <button onclick="pinApp.deleteCanvas('${canvas.id}')" class="btn btn-danger">删除</button>
+                </div>
+            `;
+            container.appendChild(canvasDiv);
+        });
+    }
+    
+    renderCanvasEditor(canvas) {
+        const editorContainer = document.getElementById('canvas-editor-container');
+        const viewport = document.getElementById('canvas-viewport');
+        if (!editorContainer || !viewport) return;
+        
+        // Clear existing content
+        viewport.innerHTML = '';
+        
+        // Create canvas background
+        const canvasBackground = document.createElement('div');
+        canvasBackground.className = 'canvas-background';
+        canvasBackground.style.width = '600px';
+        canvasBackground.style.height = '448px';
+        canvasBackground.style.backgroundColor = this.getColorValue(canvas.background_color || 1); // WHITE
+        canvasBackground.style.position = 'relative';
+        canvasBackground.style.border = '1px solid #ccc';
+        viewport.appendChild(canvasBackground);
+        
+        // Render elements
+        if (canvas.elements) {
+            canvas.elements.forEach(element => {
+                this.renderCanvasElement(canvasBackground, element);
+            });
+        }
+        
+        // Update canvas info
+        document.getElementById('canvas-name').textContent = canvas.name;
+        document.getElementById('canvas-element-count').textContent = canvas.elements ? canvas.elements.length : 0;
+    }
+    
+    renderCanvasElement(container, element) {
+        const elementDiv = document.createElement('div');
+        elementDiv.className = 'canvas-element';
+        elementDiv.style.position = 'absolute';
+        elementDiv.style.left = element.x + 'px';
+        elementDiv.style.top = element.y + 'px';
+        elementDiv.style.width = element.width + 'px';
+        elementDiv.style.height = element.height + 'px';
+        elementDiv.style.border = '1px dashed #007bff';
+        elementDiv.style.cursor = 'pointer';
+        elementDiv.dataset.elementId = element.id;
+        
+        if (!element.visible) {
+            elementDiv.style.opacity = '0.5';
+        }
+        
+        // Render based on element type
+        switch (element.type) {
+            case 0: // TEXT
+                elementDiv.innerHTML = `
+                    <div style="
+                        color: ${this.getColorValue(element.props.color)};
+                        font-size: ${element.props.font_size}px;
+                        font-weight: ${element.props.bold ? 'bold' : 'normal'};
+                        font-style: ${element.props.italic ? 'italic' : 'normal'};
+                        text-align: ${this.getAlignValue(element.props.align)};
+                        width: 100%;
+                        height: 100%;
+                        display: flex;
+                        align-items: center;
+                        padding: 4px;
+                        box-sizing: border-box;
+                    ">${element.props.text}</div>
+                `;
+                break;
+            case 1: // IMAGE
+                elementDiv.innerHTML = `
+                    <div style="
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(45deg, #f0f0f0 25%, transparent 25%, transparent 75%, #f0f0f0 75%), 
+                                    linear-gradient(45deg, #f0f0f0 25%, transparent 25%, transparent 75%, #f0f0f0 75%);
+                        background-size: 10px 10px;
+                        background-position: 0 0, 5px 5px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 12px;
+                        color: #666;
+                    ">图片: ${element.props.image_id}</div>
+                `;
+                break;
+            case 2: // RECT
+                elementDiv.style.backgroundColor = this.getColorValue(element.props.fill_color);
+                elementDiv.style.borderColor = this.getColorValue(element.props.border_color);
+                if (!element.props.filled) {
+                    elementDiv.style.backgroundColor = 'transparent';
+                }
+                break;
+        }
+        
+        // Add click handler for selection
+        elementDiv.onclick = (e) => {
+            e.stopPropagation();
+            this.selectElement(element.id);
+        };
+        
+        container.appendChild(elementDiv);
+    }
+    
+    selectElement(elementId) {
+        // Remove previous selection
+        document.querySelectorAll('.canvas-element.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+        
+        // Add selection to clicked element
+        const element = document.querySelector(`[data-element-id="${elementId}"]`);
+        if (element) {
+            element.classList.add('selected');
+            this.state.selectedElement = elementId;
+        }
+    }
+    
+    showCanvasEditor() {
+        document.getElementById('main-content').style.display = 'none';
+        document.getElementById('canvas-editor').style.display = 'block';
+    }
+    
+    hideCanvasEditor() {
+        document.getElementById('canvas-editor').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+    }
+    
+    getColorValue(colorIndex) {
+        const colors = ['#000000', '#FFFFFF', '#FF0000', '#FFFF00', '#0000FF', '#00FF00', '#FF8000'];
+        return colors[colorIndex] || '#000000';
+    }
+    
+    getAlignValue(alignIndex) {
+        const aligns = ['left', 'center', 'right'];
+        return aligns[alignIndex] || 'left';
+    }
+    
     // 工具方法
     updateConnectionStatus(status) {
         const statusElement = document.getElementById('connection-status');
@@ -600,6 +1034,60 @@ class PinDeviceAPI {
     
     async checkUpdate() {
         return this.request('/api/system/check-update');
+    }
+    
+    // Canvas API methods
+    async getCanvases() {
+        return this.request('/api/canvas');
+    }
+    
+    async createCanvas(id, name) {
+        return this.request('/api/canvas', {
+            method: 'POST',
+            body: JSON.stringify({ id, name })
+        });
+    }
+    
+    async getCanvas(canvasId) {
+        return this.request(`/api/canvas/get?id=${encodeURIComponent(canvasId)}`);
+    }
+    
+    async updateCanvas(canvas) {
+        return this.request('/api/canvas/update', {
+            method: 'PUT',
+            body: JSON.stringify(canvas)
+        });
+    }
+    
+    async deleteCanvas(canvasId) {
+        return this.request(`/api/canvas/delete?id=${encodeURIComponent(canvasId)}`, {
+            method: 'DELETE'
+        });
+    }
+    
+    async displayCanvas(canvasId) {
+        return this.request('/api/canvas/display', {
+            method: 'POST',
+            body: JSON.stringify({ canvas_id: canvasId })
+        });
+    }
+    
+    async addCanvasElement(canvasId, element) {
+        return this.request('/api/canvas/element', {
+            method: 'POST',
+            body: JSON.stringify({ canvas_id: canvasId, element })
+        });
+    }
+    
+    async uploadImage(imageId, file) {
+        const formData = new FormData();
+        formData.append('image', file);
+        
+        return this.request(`/api/images?id=${encodeURIComponent(imageId)}`, {
+            method: 'POST',
+            body: formData,
+            headers: {} // Let browser set Content-Type for FormData
+        });
     }
 }
 

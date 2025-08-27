@@ -400,6 +400,154 @@
             background: var(--success-color);
         }
         
+        /* Canvas styles */
+        .canvas-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            background: var(--surface);
+        }
+        
+        .canvas-info h4 {
+            margin-bottom: 4px;
+            color: var(--text-primary);
+        }
+        
+        .canvas-info p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin: 2px 0;
+        }
+        
+        .canvas-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .canvas-actions .btn {
+            padding: 6px 12px;
+            font-size: 14px;
+            min-width: auto;
+        }
+        
+        /* Canvas Editor Overlay */
+        .canvas-editor-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .canvas-editor-container {
+            background: var(--surface);
+            border-radius: 12px;
+            width: 100%;
+            max-width: 1200px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .canvas-editor-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--background);
+        }
+        
+        .canvas-info h2 {
+            margin: 0 0 4px 0;
+            color: var(--text-primary);
+        }
+        
+        .canvas-info span {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .canvas-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .canvas-editor-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .canvas-toolbar {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--background);
+        }
+        
+        .toolbar-group {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .canvas-workspace {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .canvas-viewport-container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100%;
+        }
+        
+        .canvas-viewport {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .canvas-background {
+            box-shadow: 0 0 0 1px #ddd;
+            border-radius: 4px;
+        }
+        
+        .canvas-element {
+            border: 1px dashed transparent !important;
+            transition: all 0.2s ease;
+        }
+        
+        .canvas-element:hover {
+            border-color: #007bff !important;
+            border-style: solid !important;
+        }
+        
+        .canvas-element.selected {
+            border-color: #007bff !important;
+            border-style: solid !important;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
+        }
+        
         /* 响应式设计 */
         @media (min-width: 768px) {
             .container {
@@ -480,6 +628,33 @@
             </div>
         </div>
         
+        <!-- 画布管理卡片 -->
+        <div class="card" id="canvas-manager-card">
+            <h2 class="card-title">画布管理</h2>
+            <div class="form-group">
+                <button type="button" class="btn btn-primary" onclick="pinApp.createNewCanvas()">
+                    创建新画布
+                </button>
+            </div>
+            
+            <div class="preset-section">
+                <h3 style="margin: 16px 0 8px 0; font-size: 16px; color: var(--text-secondary);">快速开始 - 预设模板</h3>
+                <div class="preset-buttons" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
+                    <button type="button" class="btn btn-secondary" onclick="pinApp.applyPreset('clock_preset')">
+                        时钟显示
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="pinApp.applyPreset('weather_preset')">
+                        天气显示
+                    </button>
+                </div>
+            </div>
+            
+            <div id="canvas-list">
+                <div class="loading"></div>
+                <span>正在加载画布列表...</span>
+            </div>
+        </div>
+        
         <!-- 显示设置卡片 -->
         <div class="card" id="display-settings-card">
             <h2 class="card-title">显示设置</h2>
@@ -522,6 +697,43 @@
             <button type="button" class="btn btn-secondary" id="check-update">
                 检查更新
             </button>
+        </div>
+    </div>
+    
+    <!-- 画布编辑器 -->
+    <div id="canvas-editor" style="display: none;" class="canvas-editor-overlay">
+        <div class="canvas-editor-container">
+            <div class="canvas-editor-header">
+                <div class="canvas-info">
+                    <h2 id="canvas-name">画布编辑器</h2>
+                    <span>元素数量: <span id="canvas-element-count">0</span></span>
+                </div>
+                <div class="canvas-actions">
+                    <button class="btn btn-primary" onclick="pinApp.saveCurrentCanvas()">保存</button>
+                    <button class="btn btn-secondary" onclick="pinApp.hideCanvasEditor()">关闭</button>
+                </div>
+            </div>
+            
+            <div class="canvas-editor-body">
+                <div class="canvas-toolbar">
+                    <div class="toolbar-group">
+                        <button class="btn btn-secondary" onclick="pinApp.addTextElement()">添加文字</button>
+                        <button class="btn btn-secondary" onclick="pinApp.addImageElement()">添加图片</button>
+                        <button class="btn btn-secondary" onclick="pinApp.addRectElement()">添加矩形</button>
+                    </div>
+                    <div class="toolbar-group">
+                        <button class="btn btn-success" onclick="pinApp.displayCanvas(pinApp.state.currentCanvas?.id)">显示到设备</button>
+                    </div>
+                </div>
+                
+                <div class="canvas-workspace">
+                    <div class="canvas-viewport-container">
+                        <div id="canvas-viewport" class="canvas-viewport">
+                            <!-- Canvas content will be rendered here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
