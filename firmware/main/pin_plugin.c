@@ -545,28 +545,209 @@ static esp_err_t plugin_api_get_time_string(char* time_str, size_t max_len, cons
 
 // Stub implementations for other API functions
 static esp_err_t plugin_api_http_get(const char* url, char* response, size_t max_len) {
-    // TODO: Implement HTTP GET with domain whitelist
-    return ESP_ERR_NOT_SUPPORTED;
+    if (!url || !response || max_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Simple domain whitelist for security
+    const char* allowed_domains[] = {
+        "api.github.com",
+        "httpbin.org",
+        "jsonplaceholder.typicode.com",
+        NULL
+    };
+    
+    // Extract domain from URL
+    const char* domain_start = strstr(url, "://");
+    if (!domain_start) {
+        ESP_LOGE(TAG, "Invalid URL format");
+        return ESP_ERR_INVALID_ARG;
+    }
+    domain_start += 3; // Skip "://"
+    
+    // Check if domain is whitelisted
+    bool domain_allowed = false;
+    for (int i = 0; allowed_domains[i] != NULL; i++) {
+        if (strncmp(domain_start, allowed_domains[i], strlen(allowed_domains[i])) == 0) {
+            domain_allowed = true;
+            break;
+        }
+    }
+    
+    if (!domain_allowed) {
+        ESP_LOGW(TAG, "Domain not in whitelist: %s", url);
+        return ESP_ERR_NOT_ALLOWED;
+    }
+    
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_GET,
+        .timeout_ms = 5000,
+    };
+    
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        return ESP_ERR_NO_MEM;
+    }
+    
+    esp_err_t err = esp_http_client_perform(client);
+    if (err == ESP_OK) {
+        int content_length = esp_http_client_read(client, response, max_len - 1);
+        if (content_length >= 0) {
+            response[content_length] = '\0';
+        } else {
+            err = ESP_FAIL;
+        }
+    }
+    
+    esp_http_client_cleanup(client);
+    return err;
 }
 
 static esp_err_t plugin_api_http_post(const char* url, const char* data, char* response, size_t max_len) {
-    // TODO: Implement HTTP POST with domain whitelist
-    return ESP_ERR_NOT_SUPPORTED;
+    if (!url || !data || !response || max_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Use same domain whitelist as GET
+    const char* allowed_domains[] = {
+        "api.github.com",
+        "httpbin.org", 
+        "jsonplaceholder.typicode.com",
+        NULL
+    };
+    
+    // Extract and validate domain
+    const char* domain_start = strstr(url, "://");
+    if (!domain_start) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    domain_start += 3;
+    
+    bool domain_allowed = false;
+    for (int i = 0; allowed_domains[i] != NULL; i++) {
+        if (strncmp(domain_start, allowed_domains[i], strlen(allowed_domains[i])) == 0) {
+            domain_allowed = true;
+            break;
+        }
+    }
+    
+    if (!domain_allowed) {
+        ESP_LOGW(TAG, "Domain not in whitelist for POST: %s", url);
+        return ESP_ERR_NOT_ALLOWED;
+    }
+    
+    esp_http_client_config_t config = {
+        .url = url,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 10000,
+    };
+    
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        return ESP_ERR_NO_MEM;
+    }
+    
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_post_field(client, data, strlen(data));
+    
+    esp_err_t err = esp_http_client_perform(client);
+    if (err == ESP_OK) {
+        int content_length = esp_http_client_read(client, response, max_len - 1);
+        if (content_length >= 0) {
+            response[content_length] = '\0';
+        } else {
+            err = ESP_FAIL;
+        }
+    }
+    
+    esp_http_client_cleanup(client);
+    return err;
 }
 
 static esp_err_t plugin_api_config_get(const char* key, char* value, size_t max_len) {
-    // TODO: Implement plugin-specific configuration storage
-    return ESP_ERR_NOT_SUPPORTED;
+    if (!key || !value || max_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Get current plugin context to create scoped key
+    pin_plugin_context_t* ctx = (pin_plugin_context_t*)pvTaskGetThreadLocalStoragePointer(NULL, 0);
+    if (!ctx || !ctx->plugin) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    char scoped_key[128];
+    snprintf(scoped_key, sizeof(scoped_key), "plugin_%s_%s", ctx->plugin->metadata.name, key);
+    
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open("plugins", NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+    
+    size_t required_size = max_len;
+    err = nvs_get_str(nvs_handle, scoped_key, value, &required_size);
+    nvs_close(nvs_handle);
+    
+    return err;
 }
 
 static esp_err_t plugin_api_config_set(const char* key, const char* value) {
-    // TODO: Implement plugin-specific configuration storage
-    return ESP_ERR_NOT_SUPPORTED;
+    if (!key || !value) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Get current plugin context to create scoped key
+    pin_plugin_context_t* ctx = (pin_plugin_context_t*)pvTaskGetThreadLocalStoragePointer(NULL, 0);
+    if (!ctx || !ctx->plugin) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    char scoped_key[128];
+    snprintf(scoped_key, sizeof(scoped_key), "plugin_%s_%s", ctx->plugin->metadata.name, key);
+    
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open("plugins", NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+    
+    err = nvs_set_str(nvs_handle, scoped_key, value);
+    if (err == ESP_OK) {
+        err = nvs_commit(nvs_handle);
+    }
+    
+    nvs_close(nvs_handle);
+    return err;
 }
 
 static esp_err_t plugin_api_config_delete(const char* key) {
-    // TODO: Implement plugin-specific configuration storage
-    return ESP_ERR_NOT_SUPPORTED;
+    if (!key) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    // Get current plugin context to create scoped key
+    pin_plugin_context_t* ctx = (pin_plugin_context_t*)pvTaskGetThreadLocalStoragePointer(NULL, 0);
+    if (!ctx || !ctx->plugin) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    char scoped_key[128];
+    snprintf(scoped_key, sizeof(scoped_key), "plugin_%s_%s", ctx->plugin->metadata.name, key);
+    
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open("plugins", NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+    
+    err = nvs_erase_key(nvs_handle, scoped_key);
+    if (err == ESP_OK) {
+        err = nvs_commit(nvs_handle);
+    }
+    
+    nvs_close(nvs_handle);
+    return err;
 }
 
 static esp_err_t plugin_api_display_update_content(const char* content) {

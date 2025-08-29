@@ -18,6 +18,9 @@
 #include "cJSON.h"
 
 #include "pin_webserver.h"
+#include "pin_display.h"
+#include "pin_wifi.h"
+#include "esp_timer.h"
 #include "pin_canvas.h"
 
 static const char *TAG = "PIN_WEBSERVER";
@@ -63,6 +66,69 @@ static esp_err_t sw_js_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/javascript");
     httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=31536000");
     return httpd_resp_send(req, (const char*)sw_js_start, sw_js_end - sw_js_start);
+}
+
+// Device API handlers
+static esp_err_t api_status_handler(httpd_req_t *req) {
+    cJSON *response = cJSON_CreateObject();
+    
+    // Add device information
+    cJSON_AddStringToObject(response, "firmware_version", "1.0.0");
+    cJSON_AddStringToObject(response, "device_name", "Pin E-ink Display");
+    
+    // Add battery information
+    float battery_voltage = pin_battery_get_voltage();
+    uint8_t battery_percentage = pin_battery_get_percentage(battery_voltage);
+    cJSON_AddNumberToObject(response, "battery_voltage", battery_voltage);
+    cJSON_AddNumberToObject(response, "battery_percentage", battery_percentage);
+    
+    // Add WiFi information
+    cJSON *wifi_info = cJSON_CreateObject();
+    cJSON_AddBoolToObject(wifi_info, "connected", pin_wifi_is_connected());
+    
+    if (pin_wifi_is_connected()) {
+        char ssid[32] = {0};
+        if (pin_wifi_get_current_ssid(ssid, sizeof(ssid)) == ESP_OK) {
+            cJSON_AddStringToObject(wifi_info, "ssid", ssid);
+        }
+        cJSON_AddNumberToObject(wifi_info, "rssi", pin_wifi_get_rssi());
+    }
+    cJSON_AddItemToObject(response, "wifi", wifi_info);
+    
+    // Add system information
+    cJSON *system_info = cJSON_CreateObject();
+    cJSON_AddNumberToObject(system_info, "free_heap", esp_get_free_heap_size());
+    cJSON_AddNumberToObject(system_info, "uptime", esp_timer_get_time() / 1000000);
+    cJSON_AddItemToObject(response, "system", system_info);
+    
+    return send_json_response(req, response, 200);
+}
+
+static esp_err_t api_display_refresh_handler(httpd_req_t *req) {
+    fpc_a005_handle_t display_handle = pin_display_get_handle();
+    if (!display_handle) {
+        return send_error_response(req, 500, "Display not initialized");
+    }
+    
+    esp_err_t ret = fpc_a005_refresh(display_handle, FPC_A005_REFRESH_FULL);
+    if (ret != ESP_OK) {
+        return send_error_response(req, 500, "Failed to refresh display");
+    }
+    
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "message", "Display refreshed successfully");
+    return send_json_response(req, response, 200);
+}
+
+static esp_err_t api_display_clear_handler(httpd_req_t *req) {
+    esp_err_t ret = pin_display_clear(PIN_CANVAS_COLOR_WHITE);
+    if (ret != ESP_OK) {
+        return send_error_response(req, 500, "Failed to clear display");
+    }
+    
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "message", "Display cleared successfully");
+    return send_json_response(req, response, 200);
 }
 
 // Canvas API handlers
@@ -389,16 +455,6 @@ static esp_err_t image_upload_handler(httpd_req_t *req) {
 }
 
 // Device status handler (basic implementation)
-static esp_err_t status_handler(httpd_req_t *req) {
-    cJSON *json = cJSON_CreateObject();
-    cJSON_AddStringToObject(json, "device", "Pin E-Paper Display");
-    cJSON_AddStringToObject(json, "status", "online");
-    cJSON_AddNumberToObject(json, "uptime", xTaskGetTickCount() * portTICK_PERIOD_MS / 1000);
-    cJSON_AddNumberToObject(json, "free_heap", esp_get_free_heap_size());
-    
-    return send_json_response(req, json, 200);
-}
-
 // Helper functions implementation
 static esp_err_t send_json_response(httpd_req_t *req, cJSON *json, int status_code) {
     char *json_str = cJSON_Print(json);
@@ -509,10 +565,27 @@ esp_err_t pin_webserver_start(void) {
     httpd_uri_t status_uri = {
         .uri = "/api/status",
         .method = HTTP_GET,
-        .handler = status_handler,
+        .handler = api_status_handler,
         .user_ctx = NULL
     };
     httpd_register_uri_handler(server, &status_uri);
+    
+    // Display control endpoints
+    httpd_uri_t display_refresh_uri = {
+        .uri = "/api/display/refresh",
+        .method = HTTP_POST,
+        .handler = api_display_refresh_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &display_refresh_uri);
+    
+    httpd_uri_t display_clear_uri = {
+        .uri = "/api/display/clear", 
+        .method = HTTP_POST,
+        .handler = api_display_clear_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &display_clear_uri);
 
     // Canvas API endpoints
     httpd_uri_t canvas_list_uri = {
