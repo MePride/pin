@@ -113,13 +113,16 @@ typedef struct {
 git clone https://github.com/pin-project/pin.git
 cd pin
 
-# Configure build environment
-cd firmware
-idf.py set-target esp32c3
+# Verify environment (ESP-IDF, toolchain)
+bash tools/check_env.sh
+
+# Configure build target
+cd firmware && idf.py set-target esp32c3
 
 # Build and deploy
-make all
-idf.py flash
+make all && idf.py flash
+
+# Optional: flash PWA assets to SPIFFS (uses firmware/web)
 make flash-web
 ```
 

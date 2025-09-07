@@ -13,6 +13,7 @@
 #include "nvs.h"
 #include "cJSON.h"
 #include "pin_wifi.h"
+#include "pin_display.h"
 
 static const char* TAG = "PIN_PLUGIN";
 
@@ -330,6 +331,8 @@ static void pin_plugin_task_wrapper(void* pvParameters) {
     pin_plugin_context_t* ctx = &g_plugin_manager.contexts[plugin->plugin_id];
     
     ESP_LOGI(TAG, "Plugin '%s' task started", plugin->metadata.name);
+    // Expose context via thread-local storage for API helpers
+    vTaskSetThreadLocalStoragePointer(NULL, 0, ctx);
     
     while (plugin->running) {
         // Check resource limits
@@ -757,18 +760,87 @@ static esp_err_t plugin_api_config_delete(const char* key) {
 }
 
 static esp_err_t plugin_api_display_update_content(const char* content) {
-    // TODO: Implement display content update
-    return ESP_ERR_NOT_SUPPORTED;
+    if (!content) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    pin_plugin_context_t* ctx = (pin_plugin_context_t*)pvTaskGetThreadLocalStoragePointer(NULL, 0);
+    if (!ctx) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    // Default widget region if unset
+    if (ctx->widget_region.width == 0 || ctx->widget_region.height == 0) {
+        ctx->widget_region.x = 20;
+        ctx->widget_region.y = 40;
+        ctx->widget_region.width = 560;
+        ctx->widget_region.height = 120;
+    }
+    // Store content in context (truncate if necessary)
+    size_t len = strnlen(content, 200);
+    free(ctx->widget_region.content);
+    ctx->widget_region.content = (char*)malloc(len + 1);
+    if (!ctx->widget_region.content) {
+        return ESP_ERR_NO_MEM;
+    }
+    memcpy(ctx->widget_region.content, content, len);
+    ctx->widget_region.content[len] = '\0';
+    ctx->widget_region.dirty = true;
+
+    // Map font size
+    pin_font_size_t font = PIN_FONT_MEDIUM;
+    switch (ctx->widget_region.font_size) {
+        case 12: font = PIN_FONT_SMALL; break;
+        case 16: font = PIN_FONT_MEDIUM; break;
+        case 24: font = PIN_FONT_LARGE; break;
+        case 32: font = PIN_FONT_XLARGE; break;
+        default:
+            if (ctx->widget_region.font_size >= 28) font = PIN_FONT_XLARGE;
+            else if (ctx->widget_region.font_size >= 20) font = PIN_FONT_LARGE;
+            else if (ctx->widget_region.font_size >= 14) font = PIN_FONT_MEDIUM;
+            else font = PIN_FONT_SMALL;
+            break;
+    }
+
+    // Clamp color
+    pin_color_t color = (pin_color_t)(ctx->widget_region.color);
+    if (color < PIN_COLOR_BLACK || color > PIN_COLOR_ORANGE) {
+        color = PIN_COLOR_BLACK;
+    }
+
+    // Clear region and draw text
+    pin_display_draw_rect(ctx->widget_region.x,
+                          ctx->widget_region.y,
+                          ctx->widget_region.width,
+                          ctx->widget_region.height,
+                          PIN_COLOR_WHITE,
+                          true);
+    esp_err_t ret = pin_display_draw_text(ctx->widget_region.x,
+                                          ctx->widget_region.y,
+                                          ctx->widget_region.content,
+                                          font,
+                                          color);
+    if (ret == ESP_OK) {
+        ret = pin_display_refresh(PIN_REFRESH_PARTIAL);
+        ctx->widget_region.dirty = false;
+    }
+    return ret;
 }
 
 static esp_err_t plugin_api_display_set_color(uint8_t color) {
-    // TODO: Implement display color setting
-    return ESP_ERR_NOT_SUPPORTED;
+    pin_plugin_context_t* ctx = (pin_plugin_context_t*)pvTaskGetThreadLocalStoragePointer(NULL, 0);
+    if (!ctx) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    ctx->widget_region.color = color;
+    return ESP_OK;
 }
 
 static esp_err_t plugin_api_display_set_font_size(uint8_t font_size) {
-    // TODO: Implement display font size setting
-    return ESP_ERR_NOT_SUPPORTED;
+    pin_plugin_context_t* ctx = (pin_plugin_context_t*)pvTaskGetThreadLocalStoragePointer(NULL, 0);
+    if (!ctx) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    ctx->widget_region.font_size = font_size;
+    return ESP_OK;
 }
 
 static esp_err_t plugin_api_schedule_update(uint32_t delay_seconds) {

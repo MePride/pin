@@ -13,6 +13,9 @@ static const char* TAG = "CLOCK_PLUGIN";
 // Plugin initialization
 static esp_err_t clock_init(pin_plugin_context_t* ctx) {
     ESP_LOGI(TAG, "Clock plugin initialized");
+    if (ctx && ctx->api.display_set_font_size) {
+        ctx->api.display_set_font_size(32); // XL font for readability
+    }
     return ESP_OK;
 }
 
