@@ -21,6 +21,7 @@
 #include "pin_display.h"
 #include "pin_wifi.h"
 #include "pin_plugin.h"
+#include "pin_ota.h"
 #include "pin_config.h"
 #include "pin_webserver.h"
 #include "pin_canvas.h"
@@ -303,12 +304,27 @@ void app_main(void) {
         
         // 注册内置插件
         extern pin_plugin_t clock_plugin;
+        extern pin_plugin_t weather_plugin;
+        
         pin_plugin_register(&clock_plugin);
+        pin_plugin_register(&weather_plugin);
         
         // 启用默认插件
         pin_plugin_enable("clock", true);
+        pin_plugin_enable("weather", true);
     } else {
         ESP_LOGE(TAG, "Plugin system initialization failed: %s", esp_err_to_name(ret));
+    }
+    
+    // 初始化OTA系统
+    pin_update_startup_status("Initializing OTA System...");
+    ret = pin_ota_init();
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "OTA system initialized");
+        // 启用自动更新检查 (每24小时检查一次)
+        pin_ota_set_auto_check_interval(24);
+    } else {
+        ESP_LOGE(TAG, "OTA system initialization failed: %s", esp_err_to_name(ret));
     }
     
     // 初始化Web服务器

@@ -5,6 +5,8 @@ idf_component_register(SRCS "pin_main.c"
                            "pin_config.c"
                            "pin_webserver.c"
                            "pin_clock_plugin.c"
+                           "pin_ota.c"
+                           "pin_weather_plugin.c"
                        INCLUDE_DIRS "."
                        EMBED_TXTFILES "www/index.html"
                                      "www/app.js" 
@@ -23,4 +25,6 @@ idf_component_register(SRCS "pin_main.c"
                                 mbedtls
                                 fpc_a005
                                 pin_canvas
-                                esp_adc)
+                                esp_adc
+                                esp_https_ota
+                                app_update)

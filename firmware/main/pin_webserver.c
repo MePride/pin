@@ -21,6 +21,7 @@
 #include "pin_display.h"
 #include "pin_wifi.h"
 #include "esp_timer.h"
+#include "pin_ota.h"
 #include "pin_canvas.h"
 
 static const char *TAG = "PIN_WEBSERVER";
@@ -128,6 +129,100 @@ static esp_err_t api_display_clear_handler(httpd_req_t *req) {
     
     cJSON *response = cJSON_CreateObject();
     cJSON_AddStringToObject(response, "message", "Display cleared successfully");
+    return send_json_response(req, response, 200);
+}
+
+// OTA API handlers
+static esp_err_t api_ota_status_handler(httpd_req_t *req) {
+    pin_ota_status_t ota_status;
+    esp_err_t ret = pin_ota_get_status(&ota_status);
+    if (ret != ESP_OK) {
+        return send_error_response(req, 500, "Failed to get OTA status");
+    }
+    
+    cJSON *response = cJSON_CreateObject();
+    
+    // OTA state
+    const char* state_names[] = {"idle", "checking", "downloading", "installing", "complete", "error"};
+    cJSON_AddStringToObject(response, "state", state_names[ota_status.state]);
+    cJSON_AddNumberToObject(response, "progress", ota_status.progress_percent);
+    cJSON_AddStringToObject(response, "current_version", ota_status.current_version);
+    
+    if (strlen(ota_status.error_message) > 0) {
+        cJSON_AddStringToObject(response, "error_message", ota_status.error_message);
+    }
+    
+    cJSON_AddBoolToObject(response, "update_available", ota_status.update_available);
+    cJSON_AddNumberToObject(response, "last_check_time", ota_status.last_check_time);
+    
+    if (ota_status.update_available) {
+        cJSON *update_info = cJSON_CreateObject();
+        cJSON_AddStringToObject(update_info, "version", ota_status.available_update.version);
+        cJSON_AddStringToObject(update_info, "description", ota_status.available_update.description);
+        cJSON_AddNumberToObject(update_info, "size", ota_status.available_update.size);
+        cJSON_AddBoolToObject(update_info, "force_update", ota_status.available_update.force_update);
+        cJSON_AddItemToObject(response, "available_update", update_info);
+    }
+    
+    return send_json_response(req, response, 200);
+}
+
+static esp_err_t api_ota_check_handler(httpd_req_t *req) {
+    // Use GitHub releases API as default
+    const char* update_url = "https://api.github.com/repos/MePride/pin/releases/latest";
+    
+    esp_err_t ret = pin_ota_check_update(update_url);
+    if (ret != ESP_OK) {
+        return send_error_response(req, 500, "Failed to check for updates");
+    }
+    
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "message", "Update check initiated");
+    return send_json_response(req, response, 200);
+}
+
+static esp_err_t api_ota_update_handler(httpd_req_t *req) {
+    // Simple progress callback that could be enhanced with WebSocket
+    pin_ota_progress_callback_t progress_cb = NULL;
+    pin_ota_complete_callback_t complete_cb = NULL;
+    
+    esp_err_t ret = pin_ota_start_update(progress_cb, complete_cb);
+    if (ret != ESP_OK) {
+        const char* error_msg = "Failed to start update";
+        if (ret == ESP_ERR_INVALID_STATE) {
+            error_msg = "No update available or update already in progress";
+        }
+        return send_error_response(req, 400, error_msg);
+    }
+    
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "message", "OTA update started");
+    return send_json_response(req, response, 200);
+}
+
+static esp_err_t api_ota_cancel_handler(httpd_req_t *req) {
+    esp_err_t ret = pin_ota_cancel_update();
+    if (ret != ESP_OK) {
+        return send_error_response(req, 400, "Cannot cancel update at this time");
+    }
+    
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "message", "Update cancellation requested");
+    return send_json_response(req, response, 200);
+}
+
+static esp_err_t api_ota_rollback_handler(httpd_req_t *req) {
+    esp_err_t ret = pin_ota_rollback();
+    if (ret != ESP_OK) {
+        const char* error_msg = "Rollback failed";
+        if (ret == ESP_ERR_NOT_SUPPORTED) {
+            error_msg = "No previous firmware version available for rollback";
+        }
+        return send_error_response(req, 400, error_msg);
+    }
+    
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "message", "Rollback initiated - device will reboot");
     return send_json_response(req, response, 200);
 }
 
@@ -586,6 +681,47 @@ esp_err_t pin_webserver_start(void) {
         .user_ctx = NULL
     };
     httpd_register_uri_handler(server, &display_clear_uri);
+    
+    // OTA API endpoints
+    httpd_uri_t ota_status_uri = {
+        .uri = "/api/ota/status",
+        .method = HTTP_GET,
+        .handler = api_ota_status_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &ota_status_uri);
+    
+    httpd_uri_t ota_check_uri = {
+        .uri = "/api/ota/check",
+        .method = HTTP_POST,
+        .handler = api_ota_check_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &ota_check_uri);
+    
+    httpd_uri_t ota_update_uri = {
+        .uri = "/api/ota/update",
+        .method = HTTP_POST,
+        .handler = api_ota_update_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &ota_update_uri);
+    
+    httpd_uri_t ota_cancel_uri = {
+        .uri = "/api/ota/cancel",
+        .method = HTTP_POST,
+        .handler = api_ota_cancel_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &ota_cancel_uri);
+    
+    httpd_uri_t ota_rollback_uri = {
+        .uri = "/api/ota/rollback",
+        .method = HTTP_POST,
+        .handler = api_ota_rollback_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &ota_rollback_uri);
 
     // Canvas API endpoints
     httpd_uri_t canvas_list_uri = {

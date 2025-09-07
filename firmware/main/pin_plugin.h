@@ -75,6 +75,33 @@ struct pin_plugin_context {
         esp_err_t (*display_update_content)(const char* content);
         esp_err_t (*display_set_color)(uint8_t color);
         esp_err_t (*display_set_font_size)(uint8_t font_size);
+        
+        // HTTP client functions
+        esp_err_t (*http_get)(const char* url, char* response, size_t response_size);
+        esp_err_t (*http_post)(const char* url, const char* data, char* response, size_t response_size);
+        
+        // Configuration management
+        esp_err_t (*config_get)(const char* key, char* value, size_t value_size);
+        esp_err_t (*config_set)(const char* key, const char* value);
+        esp_err_t (*config_delete)(const char* key);
+        
+        // Logging functions
+        void (*log_info)(const char* tag, const char* format, ...);
+        void (*log_warn)(const char* tag, const char* format, ...);
+        void (*log_error)(const char* tag, const char* format, ...);
+        void (*log_debug)(const char* tag, const char* format, ...);
+        
+        // System information
+        uint32_t (*get_uptime)(void);
+        uint32_t (*get_free_heap)(void);
+        bool (*is_wifi_connected)(void);
+        esp_err_t (*get_mac_address)(char* mac_str, size_t mac_str_size);
+        
+        // Timer functions
+        esp_err_t (*create_timer)(uint32_t interval_ms, bool repeat, void (*callback)(void*), void* arg);
+        esp_err_t (*start_timer)(void* timer_handle);
+        esp_err_t (*stop_timer)(void* timer_handle);
+        esp_err_t (*delete_timer)(void* timer_handle);
     } api;
     
     // Resource monitoring

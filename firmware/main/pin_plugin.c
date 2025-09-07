@@ -298,21 +298,26 @@ static esp_err_t pin_plugin_init_context(pin_plugin_context_t* ctx, pin_plugin_t
     ctx->plugin = plugin;
     
     // Initialize API functions
-    ////ctx->api.log_info = plugin_api_log_info;
-    ////ctx->api.log_warn = plugin_api_log_warn;
-    ////ctx->api.log_error = plugin_api_log_error;
-    ////ctx->api.http_get = plugin_api_http_get;
-    ////ctx->api.http_post = plugin_api_http_post;
-    //ctx->api.config_get = plugin_api_config_get;
-    //ctx->api.config_set = plugin_api_config_set;
-    //ctx->api.config_delete = plugin_api_config_delete;
-    //ctx->api.get_timestamp = plugin_api_get_timestamp;
-    //ctx->api.get_time_string = plugin_api_get_time_string;
-    //ctx->api.display_update_content = plugin_api_display_update_content;
-    //ctx->api.display_set_color = plugin_api_display_set_color;
-    //ctx->api.display_set_font_size = plugin_api_display_set_font_size;
-    //ctx->api.schedule_update = plugin_api_schedule_update;
-    //ctx->api.cancel_scheduled_update = plugin_api_cancel_scheduled_update;
+    ctx->api.log_info = plugin_api_log_info;
+    ctx->api.log_warn = plugin_api_log_warn;
+    ctx->api.log_error = plugin_api_log_error;
+    ctx->api.log_debug = plugin_api_log_debug;
+    ctx->api.http_get = plugin_api_http_get;
+    ctx->api.http_post = plugin_api_http_post;
+    ctx->api.config_get = plugin_api_config_get;
+    ctx->api.config_set = plugin_api_config_set;
+    ctx->api.config_delete = plugin_api_config_delete;
+    ctx->api.display_update_content = plugin_api_display_update_content;
+    ctx->api.display_set_color = plugin_api_display_set_color;
+    ctx->api.display_set_font_size = plugin_api_display_set_font_size;
+    ctx->api.get_uptime = plugin_api_get_uptime;
+    ctx->api.get_free_heap = plugin_api_get_free_heap;
+    ctx->api.is_wifi_connected = plugin_api_is_wifi_connected;
+    ctx->api.get_mac_address = plugin_api_get_mac_address;
+    ctx->api.create_timer = plugin_api_create_timer;
+    ctx->api.start_timer = plugin_api_start_timer;
+    ctx->api.stop_timer = plugin_api_stop_timer;
+    ctx->api.delete_timer = plugin_api_delete_timer;
     //ctx->api.emit_event = plugin_api_emit_event;
     //ctx->api.subscribe_event = plugin_api_subscribe_event;
     
@@ -783,4 +788,83 @@ static esp_err_t plugin_api_emit_event(const char* event_name, const char* data)
 static esp_err_t plugin_api_subscribe_event(const char* event_name, void (*callback)(const char* data)) {
     // TODO: Implement event subscription
     return ESP_ERR_NOT_SUPPORTED;
+}
+
+static void plugin_api_log_debug(const char* tag, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    esp_log_writev(ESP_LOG_DEBUG, tag, format, args);
+    va_end(args);
+}
+
+static uint32_t plugin_api_get_uptime(void) {
+    return (uint32_t)(esp_timer_get_time() / 1000000); // Convert microseconds to seconds
+}
+
+static uint32_t plugin_api_get_free_heap(void) {
+    return esp_get_free_heap_size();
+}
+
+static bool plugin_api_is_wifi_connected(void) {
+    // TODO: Add actual WiFi status check
+    return true; // Placeholder - implement with pin_wifi.h
+}
+
+static esp_err_t plugin_api_get_mac_address(char* mac_str, size_t mac_str_size) {
+    if (!mac_str || mac_str_size < 18) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    uint8_t mac[6];
+    esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, mac);
+    if (ret == ESP_OK) {
+        snprintf(mac_str, mac_str_size, "%02X:%02X:%02X:%02X:%02X:%02X",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+    return ret;
+}
+
+static esp_err_t plugin_api_create_timer(uint32_t interval_ms, bool repeat, void (*callback)(void*), void* arg) {
+    if (!callback) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    
+    esp_timer_create_args_t timer_args = {
+        .callback = callback,
+        .arg = arg,
+        .name = "plugin_timer"
+    };
+    
+    esp_timer_handle_t timer_handle;
+    esp_err_t ret = esp_timer_create(&timer_args, &timer_handle);
+    if (ret == ESP_OK) {
+        // Store timer handle in context or return it somehow
+        // For now, just start the timer immediately
+        if (repeat) {
+            ret = esp_timer_start_periodic(timer_handle, interval_ms * 1000);
+        } else {
+            ret = esp_timer_start_once(timer_handle, interval_ms * 1000);
+        }
+    }
+    
+    return ret;
+}
+
+static esp_err_t plugin_api_start_timer(void* timer_handle) {
+    // Timer is already started in create_timer for now
+    return ESP_OK;
+}
+
+static esp_err_t plugin_api_stop_timer(void* timer_handle) {
+    if (!timer_handle) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return esp_timer_stop((esp_timer_handle_t)timer_handle);
+}
+
+static esp_err_t plugin_api_delete_timer(void* timer_handle) {
+    if (!timer_handle) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return esp_timer_delete((esp_timer_handle_t)timer_handle);
 }
