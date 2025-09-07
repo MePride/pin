@@ -172,6 +172,33 @@ Complete hardware design documentation including:
 - Bill of materials with supplier information and part numbers
 - Assembly drawings and manufacturing notes
 
+### Display Variants
+
+If your panel FPC silk reads "FPC-A005 20.06.15" and exposes a 24‑pin FPC without a driver board, it most likely matches a 2.9" BW panel (GDEY029T94, 128×296) with SSD1680 controller, not the 7‑color panel used by this repo's default firmware.
+
+- Identification: See LilyGo GxEPD2 example referencing this exact FPC marking and model mapping:
+  - Driver class: GxEPD2_290_GDEY029T94 (SSD1680)
+  - Source: https://github.com/Xinyuan-LilyGO/LilyGo-T5-Epaper-Series/blob/d69cfb46554ce8ffe174d7495917f466d7676670/lib/GxEPD2/examples/GxEPD2_WS_ESP32_Driver/GxEPD2_WS_ESP32_Driver.ino#L84
+
+#### What to prepare (BW panel, 24‑pin FPC)
+- Driver board: Waveshare ESP32 e‑Paper Driver Board, or Good Display DESPI‑C02 (24‑pin FFC socket).
+- Cable: 24‑pin 0.5 mm FFC cable (50–100 mm recommended).
+- Wires: Female‑female Dupont jumpers.
+
+#### Wiring (to Waveshare ESP32 e‑Paper Driver Board)
+- BUSY → GPIO25
+- RST → GPIO26
+- DC → GPIO27
+- CS → GPIO15
+- CLK/SCK → GPIO13
+- DIN/MOSI → GPIO14
+- 3V3 / GND → 3.3 V / GND
+- Notes: This board remaps SPI (HSPI; SCK/MOSI swapped). The example shows this mapping explicitly: lines 20 and 25 in the file above.
+
+#### Firmware support status
+- Current firmware targets a 7‑color FPC‑A005 display (600×448). An SSD1680 (BW) driver will be added as `epd_ssd1680` and integrated via `pin_display` selection.
+- For immediate bring‑up on the BW panel, you can prototype with GxEPD2 using `GxEPD2_290_GDEY029T94` and the Waveshare board mapping, then migrate to this firmware when the SSD1680 driver lands.
+
 ### Pin Assignment
 ```
 Display Interface:     Power Management:     User Interface:
