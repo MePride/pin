@@ -12,6 +12,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "cJSON.h"
+#include "pin_wifi.h"
 
 static const char* TAG = "PIN_PLUGIN";
 
@@ -806,8 +807,7 @@ static uint32_t plugin_api_get_free_heap(void) {
 }
 
 static bool plugin_api_is_wifi_connected(void) {
-    // TODO: Add actual WiFi status check
-    return true; // Placeholder - implement with pin_wifi.h
+    return pin_wifi_is_connected();
 }
 
 static esp_err_t plugin_api_get_mac_address(char* mac_str, size_t mac_str_size) {

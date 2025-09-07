@@ -8,6 +8,11 @@ PROJECT_NAME := pin_firmware
 IDF_PATH ?= $(shell echo $$IDF_PATH)
 IDF_TARGET := esp32c3
 
+# Guard: ensure ESP-IDF is available
+ifeq ($(strip $(IDF_PATH)),)
+$(error IDF_PATH is not set. Install ESP-IDF v5.1+ and run 'source <esp-idf>/export.sh' to populate the environment.)
+endif
+
 # Source directories
 MAIN_DIR := main
 COMPONENTS_DIR := components
@@ -23,7 +28,7 @@ MONITOR_BAUD := 115200
 include $(IDF_PATH)/tools/cmake/project.mk
 
 # Custom targets
-.PHONY: web-build web-embed flash-web monitor-full clean-all help
+.PHONY: web-build web-embed flash-web monitor-full clean-all help env-check lint docs
 
 # Build web assets
 web-build:
@@ -86,9 +91,21 @@ help:
 	@echo "  flash-web     - Flash web assets to SPIFFS"
 	@echo "  monitor-full  - Enhanced monitor with plugin logs"
 	@echo "  clean-all     - Clean everything"
+	@echo "  env-check     - Verify ESP-IDF toolchain and prereqs"
 	@echo "  all          - Build and flash everything"
 	@echo "  dev          - Quick development cycle"
 	@echo ""
 	@echo "Configuration:"
 	@echo "  MONITOR_PORT  - Serial port (default: $(MONITOR_PORT))"
 	@echo "  BUILD_TYPE    - Build type: debug/release (default: $(BUILD_TYPE))"
+
+# Environment check helper
+env-check:
+	@bash ../tools/check_env.sh
+
+# Optional convenience targets (stubbed here)
+lint:
+	@echo "No lint configured in Makefile. Use 'idf.py clang-tidy' or project-specific tools if available."
+
+docs:
+	@echo "No docs build configured. Generate with Doxygen or project scripts if present."
